@@ -40,6 +40,7 @@ find_library(PARDISO
   pardiso500-GNU461-X86-64
   pardiso500-GNU472-X86-64
   pardiso500-GNU481-X86-64
+  pardiso600-GNU800-X86-64
   pardiso500-MPI-INTEL1301-X86-64
   pardiso500-MPI-GNU450-X86-64
   pardiso500-MPI-GNU461-X86-64
@@ -61,10 +62,14 @@ if (${PARDISO} MATCHES "NOTFOUND")
 else()
   message("Using PARDISO library at ${PARDISO}")
   add_definitions(-DUSE_PARDISO)
-  set(ADDITIONAL_LIBRARIES ${PARDISO})
   set(ADDITIONAL_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PardisoSolver.cpp
   )
+  add_library(pardiso STATIC IMPORTED)
+  set_property(TARGET pardiso PROPERTY IMPORTED_LOCATION ${PARDISO})
+
+  find_package(BLAS REQUIRED)
+  target_link_libraries(pardiso INTERFACE BLAS::BLAS "-lgomp -lgfortran")
 endif()
 
 # Compile thread building blocks
@@ -72,11 +77,16 @@ set(TBB_BUILD_STATIC ON CACHE BOOL " " FORCE)
 set(TBB_BUILD_SHARED OFF CACHE BOOL " " FORCE)
 set(TBB_BUILD_TBBMALLOC OFF CACHE BOOL " " FORCE)
 set(TBB_BUILD_TBBMALLOC_PROXY OFF CACHE BOOL " " FORCE)
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/ext/tbb ext_build/tbb)
+
+
+if(NOT TARGET tbb::tbb)
+    find_package(TBB REQUIRED) # Make sure we use the same Intel OneAPI TBB that MKL is linked with...
+    add_library(tbb::tbb ALIAS TBB::tbb)
+endif()
+
 
 include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/ext/libigl/include
-  ${CMAKE_CURRENT_SOURCE_DIR}/ext/tbb/include
   ${CMAKE_CURRENT_SOURCE_DIR}/ext/eigen
 )
 
@@ -95,4 +105,8 @@ set(SOURCES
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
-target_link_libraries(${PROJECT_NAME} tbb_static ${ADDITIONAL_LIBRARIES})
+target_link_libraries(${PROJECT_NAME} tbb::tbb)
+
+if(TARGET pardiso)
+    target_link_libraries(${PROJECT_NAME} pardiso)
+endif()
